@@ -19,7 +19,7 @@ jobs:
 
       - name: Validar Dockerfile (imagem mal otimizada)
         run: |
-          echo "🧩 Verificando docker/Dockerfile.bad.""
+          echo "🧩 Verificando docker/Dockerfile.bad."
           RESULT=$(docker run --rm -i hadolint/hadolint < docker/Dockerfile.bad || true)
           if [ -z "$RESULT" ]; then
             echo "✅ Nenhum problema encontrado em docker/Dockerfile.bad"
