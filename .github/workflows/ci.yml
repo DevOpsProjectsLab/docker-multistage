@@ -1,0 +1,57 @@
+name: Docker Optimization CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  docker-comparison:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate Dockerfiles with Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: |
+            docker/Dockerfile.bad
+            docker/Dockerfile.optimized
+
+      - name: Build "bad" image
+        run: |
+          docker build -t java-bad -f docker/Dockerfile.bad .
+          BAD_SIZE=$(docker images java-bad --format "{{.Size}}")
+          echo "BAD_SIZE=$BAD_SIZE" >> $GITHUB_ENV
+
+      - name: Build "optimized" image
+        run: |
+          docker build -t java-optimized -f docker/Dockerfile.optimized .
+          OPTIMIZED_SIZE=$(docker images java-optimized --format "{{.Size}}")
+          echo "OPTIMIZED_SIZE=$OPTIMIZED_SIZE" >> $GITHUB_ENV
+
+      - name: Compare image sizes
+        run: |
+          echo "Comparando tamanhos de imagem:"
+          echo "Imagem ruim: $BAD_SIZE"
+          echo "Imagem otimizada: $OPTIMIZED_SIZE"
+
+          BAD_MB=$(echo $BAD_SIZE | sed 's/MB//')
+          OPT_MB=$(echo $OPTIMIZED_SIZE | sed 's/MB//')
+          GAIN=$(echo "scale=2; (1 - $OPT_MB / $BAD_MB) * 100" | bc)
+
+          echo "Ganho de otimização: $GAIN%"
+          echo "GAIN_PERCENT=$GAIN" >> $GITHUB_ENV
+
+      - name: Generate summary
+        run: |
+          echo "## 🚀 Docker Image Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Imagem | Tamanho |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ❌ Ruim | $BAD_SIZE |" >> $GITHUB_STEP_SUMMARY
+          echo "| ✅ Otimizada | $OPTIMIZED_SIZE |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📉 **Redução total:** $GAIN%" >> $GITHUB_STEP_SUMMARY
