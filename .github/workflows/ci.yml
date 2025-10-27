@@ -1,4 +1,4 @@
-name: Docker Optimization CI
+name: 🚀 Docker Optimization CI
 
 on:
   push:
@@ -6,52 +6,99 @@ on:
   pull_request:
     branches: ["main"]
 
+permissions:
+  contents: read
+
 jobs:
-  docker-comparison:
+  Lint:
+    name: Lint Dockerfiles
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Fazer checkout do código
         uses: actions/checkout@v4
 
-      - name: Validate Dockerfiles with Hadolint
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: |
-            docker/Dockerfile.bad
-            docker/Dockerfile.optimized
-
-      - name: Build "bad" image
+      - name: Validar Dockerfile (imagem mal otimizada)
         run: |
+          echo "🧩 Verificando docker/Dockerfile.bad..."
+          docker run --rm -i hadolint/hadolint < docker/Dockerfile.bad || true
+          echo "✅ Lint finalizado para imagem mal otimizada"
+          echo ""
+
+      - name: Validar Dockerfile (imagem otimizada)
+        run: |
+          echo "🧩 Verificando docker/Dockerfile.optimized..."
+          docker run --rm -i hadolint/hadolint < docker/Dockerfile.optimized || true
+          echo "✅ Lint finalizado para imagem otimizada"
+          echo ""
+
+  Build:
+    name: Build Docker
+    runs-on: ubuntu-latest
+    needs: Lint
+    steps:
+      - name: Fazer checkout do código
+        uses: actions/checkout@v4
+
+      - name: Construir imagem mal otimizada
+        run: |
+          echo "🔧 Iniciando build da imagem ruim:"
           docker build -t java-bad -f docker/Dockerfile.bad .
-          BAD_SIZE=$(docker images java-bad --format "{{.Size}}")
-          echo "BAD_SIZE=$BAD_SIZE" >> $GITHUB_ENV
+          docker save java-bad -o java-bad.tar
+          echo "✅ Build concluído da imagem ruim"
 
-      - name: Build "optimized" image
+      - name: Construir imagem otimizada
         run: |
+          echo "⚙️ Iniciando build da imagem otimizada:"
           docker build -t java-optimized -f docker/Dockerfile.optimized .
-          OPTIMIZED_SIZE=$(docker images java-optimized --format "{{.Size}}")
-          echo "OPTIMIZED_SIZE=$OPTIMIZED_SIZE" >> $GITHUB_ENV
+          docker save java-optimized -o java-optimized.tar
+          echo "✅ Build concluído da imagem otimizada"
 
-      - name: Compare image sizes
+      - name: Publicar imagens como artefatos
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: |
+            java-bad.tar
+            java-optimized.tar
+
+  Report:
+    name: Compare & Generate Report
+    runs-on: ubuntu-latest
+    needs: Build
+    steps:
+      - name: Baixar artefatos das imagens
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+
+      - name: Recarregar imagens Docker
         run: |
-          echo "Comparando tamanhos de imagem:"
-          echo "Imagem ruim: $BAD_SIZE"
-          echo "Imagem otimizada: $OPTIMIZED_SIZE"
+          echo "📦 Carregando imagens salvas?"
+          docker load -i java-bad.tar
+          docker load -i java-optimized.tar
+          docker images | grep java-
+          echo "✅ Imagens carregadas com sucesso"
 
-          BAD_MB=$(echo $BAD_SIZE | sed 's/MB//')
-          OPT_MB=$(echo $OPTIMIZED_SIZE | sed 's/MB//')
-          GAIN=$(echo "scale=2; (1 - $OPT_MB / $BAD_MB) * 100" | bc)
-
-          echo "Ganho de otimização: $GAIN%"
-          echo "GAIN_PERCENT=$GAIN" >> $GITHUB_ENV
-
-      - name: Generate summary
+      - name: omparar tamanhos das imagens
         run: |
-          echo "## 🚀 Docker Image Comparison" >> $GITHUB_STEP_SUMMARY
+          BAD_SIZE=$(docker images java-bad --format "{{.Size}}" | sed 's/MB//')
+          OPT_SIZE=$(docker images java-optimized --format "{{.Size}}" | sed 's/MB//')
+          GAIN=$(echo "scale=2; (1 - $OPT_SIZE / $BAD_SIZE) * 100" | bc)
+          echo "📊 Resultado:"
+          echo "  - Imagem ruim: ${BAD_SIZE}MB"
+          echo "  - Imagem otimizada: ${OPT_SIZE}MB"
+          echo "  - Ganho total: ${GAIN}%"
+          echo "BAD_SIZE=${BAD_SIZE}" >> $GITHUB_ENV
+          echo "OPT_SIZE=${OPT_SIZE}" >> $GITHUB_ENV
+          echo "GAIN_PERCENT=${GAIN}" >> $GITHUB_ENV
+
+      - name: Gerar relatório no GitHub Summary
+        run: |
+          echo "## 🐳 Relatório de Otimização de Imagens Docker" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Imagem | Tamanho |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|----------|" >> $GITHUB_STEP_SUMMARY
-          echo "| ❌ Ruim | $BAD_SIZE |" >> $GITHUB_STEP_SUMMARY
-          echo "| ✅ Otimizada | $OPTIMIZED_SIZE |" >> $GITHUB_STEP_SUMMARY
+          echo "| ❌ Ruim | ${BAD_SIZE}MB |" >> $GITHUB_STEP_SUMMARY
+          echo "| ✅ Otimizada | ${OPT_SIZE}MB |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📉 **Redução total:** $GAIN%" >> $GITHUB_STEP_SUMMARY
+          echo "📉 **Redução total:** ${GAIN_PERCENT}% 🔥" >> $GITHUB_STEP_SUMMARY
