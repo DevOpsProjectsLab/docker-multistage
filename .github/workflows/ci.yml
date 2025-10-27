@@ -19,16 +19,26 @@ jobs:
 
       - name: Validar Dockerfile (imagem mal otimizada)
         run: |
-          echo "🧩 Verificando docker/Dockerfile.bad..."
-          docker run --rm -i hadolint/hadolint < docker/Dockerfile.bad || true
-          echo "✅ Lint finalizado para imagem mal otimizada"
+          echo "🧩 Verificando docker/Dockerfile.bad.""
+          RESULT=$(docker run --rm -i hadolint/hadolint < docker/Dockerfile.bad || true)
+          if [ -z "$RESULT" ]; then
+            echo "✅ Nenhum problema encontrado em docker/Dockerfile.bad"
+          else
+            echo "⚠️ Problemas detectados:"
+            echo "$RESULT"
+          fi
           echo ""
 
       - name: Validar Dockerfile (imagem otimizada)
         run: |
-          echo "🧩 Verificando docker/Dockerfile.optimized..."
-          docker run --rm -i hadolint/hadolint < docker/Dockerfile.optimized || true
-          echo "✅ Lint finalizado para imagem otimizada"
+          echo "🧩 Verificando docker/Dockerfile.optimized."
+          RESULT=$(docker run --rm -i hadolint/hadolint < docker/Dockerfile.optimized || true)
+          if [ -z "$RESULT" ]; then
+            echo "✅ Nenhum problema encontrado em docker/Dockerfile.optimized"
+          else
+            echo "⚠️ Problemas detectados:"
+            echo "$RESULT"
+          fi
           echo ""
 
   Build:
