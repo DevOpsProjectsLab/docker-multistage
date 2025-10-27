@@ -72,7 +72,7 @@ jobs:
             java-optimized.tar
 
   Security:
-    name: Security Scan (Trivy)
+    name: Security Scan 
     runs-on: ubuntu-latest
     needs: Build
     steps:
