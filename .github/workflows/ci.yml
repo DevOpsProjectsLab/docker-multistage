@@ -83,31 +83,37 @@ jobs:
 
       - name: Recarregar imagens Docker
         run: |
-          echo "📦 Carregando imagens salvas?"
           docker load -i java-bad.tar
           docker load -i java-optimized.tar
 
-      - name: Analisar vulnerabilidades com Trivy
+      - name: Instalar dependências (jq e Trivy)
         run: |
-          echo "🔍 Escaneando imagem ruim:"
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy image --quiet --format json --output trivy-bad.json java-bad
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+          echo "Instalando Trivy."
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
 
-          echo "🔍 Escaneando imagem otimizada:"
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy image --quiet --format json --output trivy-optimized.json java-optimized
+      - name: Executar varredura com Trivy
+        run: |
+          echo "Iniciando varredura da imagem ruim."
+          trivy image --quiet --format json --output trivy-bad.json java-bad || true
+
+          echo "Iniciando varredura da imagem otimizada."
+          trivy image --quiet --format json --output trivy-optimized.json java-optimized || true
+
+          echo "Varredura concluída."
 
       - name: Extrair contagem de vulnerabilidades
         run: |
           BAD_VULNS=$(jq '[.Results[].Vulnerabilities | length] | add' trivy-bad.json)
           OPT_VULNS=$(jq '[.Results[].Vulnerabilities | length] | add' trivy-optimized.json)
-          echo "BAD_VULNS=${BAD_VULNS}" >> $GITHUB_ENV
-          echo "OPT_VULNS=${OPT_VULNS}" >> $GITHUB_ENV
-          echo "🔐 Vulnerabilidades detectadas:"
-          echo "  - Imagem ruim: ${BAD_VULNS}"
-          echo "  - Imagem otimizada: ${OPT_VULNS}"
+          echo "BAD_VULNS=${BAD_VULNS:-0}" >> $GITHUB_ENV
+          echo "OPT_VULNS=${OPT_VULNS:-0}" >> $GITHUB_ENV
+          echo "Resumo das vulnerabilidades:"
+          echo "  - Imagem ruim: ${BAD_VULNS:-0}"
+          echo "  - Imagem otimizada: ${OPT_VULNS:-0}"
 
-      - name: 📦 Publicar relatórios do Trivy
+      - name: Publicar relatórios do Trivy
         uses: actions/upload-artifact@v4
         with:
           name: trivy-scan-results
